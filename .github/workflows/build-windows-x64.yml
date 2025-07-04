@@ -17,6 +17,7 @@ env:
   RUST_VERSION: "1.75"
   LLVM_VERSION: "15.0.6"
   FLUTTER_VERSION: "3.24.5"
+  FLUTTER_RUST_BRIDGE_VERSION: "1.80.1"
   VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
   VCPKG_COMMIT_ID: "6f29f12e82a8293156836ad81cc9bf5af41fe836"
   VERSION: "1.4.0"
@@ -24,9 +25,6 @@ env:
   TAG_NAME: "${{ inputs.upload-tag }}"
 
 jobs:
-  generate-bridge:
-    uses: ./.github/workflows/bridge.yml
-
   build-RustDeskTempTopMostWindow:
     uses: ./.github/workflows/third-party-RustDeskTempTopMostWindow.yml
     with:
@@ -38,7 +36,7 @@ jobs:
 
   build-windows-x64:
     name: Windows x64 Build
-    needs: [build-RustDeskTempTopMostWindow, generate-bridge]
+    needs: [build-RustDeskTempTopMostWindow]
     runs-on: windows-2022
     steps:
       - name: Export GitHub Actions cache environment variables
@@ -53,11 +51,16 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Restore bridge files
-        uses: actions/download-artifact@master
-        with:
-          name: bridge-artifact
-          path: ./
+      - name: Install flutter rust bridge deps
+        shell: bash
+        run: |
+          cargo install flutter_rust_bridge_codegen --version ${{ env.FLUTTER_RUST_BRIDGE_VERSION }} --features "uuid" --locked
+
+      - name: Generate flutter rust bridge
+        shell: bash
+        run: |
+          ~/.cargo/bin/flutter_rust_bridge_codegen --rust-input ./src/flutter_ffi.rs --dart-output ./flutter/lib/generated_bridge.dart --c-output ./flutter/macos/Runner/bridge_generated.h --class-name RustdeskImpl
+          cp ./flutter/macos/Runner/bridge_generated.h ./flutter/ios/Runner/bridge_generated.h
 
       - name: Install LLVM and Clang
         uses: KyleMayes/install-llvm-action@v1
