@@ -176,7 +176,7 @@ jobs:
         if: ${{ inputs.upload-artifact }}
         uses: actions/download-artifact@master
         with:
-          name: RustDeskTempTopMostWindow-Release-x64
+          name: topmostwindow-artifacts
           path: ./rustdesk
 
       - name: Upload unsigned files
