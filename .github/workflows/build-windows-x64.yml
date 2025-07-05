@@ -17,7 +17,6 @@ env:
   RUST_VERSION: "1.75"
   LLVM_VERSION: "15.0.6"
   FLUTTER_VERSION: "3.24.5"
-  FLUTTER_RUST_BRIDGE_VERSION: "1.80.1"
   VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
   VCPKG_COMMIT_ID: "6f29f12e82a8293156836ad81cc9bf5af41fe836"
   VERSION: "1.4.0"
@@ -25,6 +24,9 @@ env:
   TAG_NAME: "${{ inputs.upload-tag }}"
 
 jobs:
+  generate-bridge:
+    uses: ./.github/workflows/bridge.yml
+
   build-RustDeskTempTopMostWindow:
     uses: ./.github/workflows/third-party-RustDeskTempTopMostWindow.yml
     with:
@@ -36,7 +38,7 @@ jobs:
 
   build-windows-x64:
     name: Windows x64 Build
-    needs: [build-RustDeskTempTopMostWindow]
+    needs: [build-RustDeskTempTopMostWindow, generate-bridge]
     runs-on: windows-2022
     steps:
       - name: Export GitHub Actions cache environment variables
@@ -51,16 +53,11 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Install flutter rust bridge deps
-        shell: bash
-        run: |
-          cargo install flutter_rust_bridge_codegen --version ${{ env.FLUTTER_RUST_BRIDGE_VERSION }} --features "uuid" --locked
-
-      - name: Generate flutter rust bridge
-        shell: bash
-        run: |
-          ~/.cargo/bin/flutter_rust_bridge_codegen --rust-input ./src/flutter_ffi.rs --dart-output ./flutter/lib/generated_bridge.dart --c-output ./flutter/macos/Runner/bridge_generated.h --class-name RustdeskImpl
-          cp ./flutter/macos/Runner/bridge_generated.h ./flutter/ios/Runner/bridge_generated.h
+      - name: Restore bridge files
+        uses: actions/download-artifact@master
+        with:
+          name: bridge-artifact
+          path: ./
 
       - name: Install LLVM and Clang
         uses: KyleMayes/install-llvm-action@v1
@@ -129,7 +126,7 @@ jobs:
       - name: Build rustdesk
         run: |
           # Build RustDesk for Windows x64
-          python3 .\build.py --portable --hwcodec --flutter --vram
+          python3 .\build.py --portable --hwcodec --flutter --vram --skip-portable-pack
           mv ./flutter/build/windows/x64/runner/Release ./rustdesk
 
           # Download usbmmidd_v2.zip and extract it to ./rustdesk
@@ -139,7 +136,32 @@ jobs:
           Remove-Item -Path "usbmmidd_v2\deviceinstaller64.exe", "usbmmidd_v2\deviceinstaller.exe", "usbmmidd_v2\usbmmidd.bat"
           mv -Force .\usbmmidd_v2 ./rustdesk
 
-          # Printer driver files removed to reduce file size
+          # Download printer driver files and extract them to ./rustdesk
+          try {
+            Invoke-WebRequest -Uri https://github.com/rustdesk/hbb_common/releases/download/driver/rustdesk_printer_driver_v4.zip -OutFile rustdesk_printer_driver_v4.zip
+            Invoke-WebRequest -Uri https://github.com/rustdesk/hbb_common/releases/download/driver/printer_driver_adapter.zip -OutFile printer_driver_adapter.zip
+            Invoke-WebRequest -Uri https://github.com/rustdesk/hbb_common/releases/download/driver/sha256sums -OutFile sha256sums
+
+            # Check and move the files
+            $checksum_driver = (Select-String -Path .\sha256sums -Pattern '^([a-fA-F0-9]{64}) \*rustdesk_printer_driver_v4\.zip$').Matches.Groups[1].Value
+            $downloadsum_driver = Get-FileHash -Path rustdesk_printer_driver_v4.zip -Algorithm SHA256
+            $checksum_dll = (Select-String -Path .\sha256sums -Pattern '^([a-fA-F0-9]{64}) \*printer_driver_adapter\.zip$').Matches.Groups[1].Value
+            $downloadsum_dll = Get-FileHash -Path printer_driver_adapter.zip -Algorithm SHA256
+            if ($checksum_driver -eq $downloadsum_driver.Hash -and $checksum_dll -eq $downloadsum_dll.Hash) {
+                Write-Output "rustdesk_printer_driver_v4, checksums match, extract the file."
+                Expand-Archive rustdesk_printer_driver_v4.zip -DestinationPath .
+                mkdir ./rustdesk/drivers
+                mv -Force .\rustdesk_printer_driver_v4 ./rustdesk/drivers/RustDeskPrinterDriver
+                Expand-Archive printer_driver_adapter.zip -DestinationPath .
+                mv -Force .\printer_driver_adapter.dll ./rustdesk
+            } elseif ($checksum_driver -ne $downloadsum_driver.Hash) {
+                Write-Output "rustdesk_printer_driver_v4, checksums do not match, ignore the file."
+            } else {
+                Write-Output "printer_driver_adapter.dll, checksums do not match, ignore the file."
+            }
+          } catch {
+            Write-Output "Failed to download printer driver files: $_"
+          }
 
       - name: Find Runner.res
         run: |
@@ -156,6 +178,24 @@ jobs:
         with:
           name: topmostwindow-artifacts
           path: ./rustdesk
+
+      - name: Install UPX
+        run: |
+          Invoke-WebRequest -Uri https://github.com/upx/upx/releases/download/v4.2.2/upx-4.2.2-win64.zip -OutFile upx.zip
+          Expand-Archive upx.zip -DestinationPath .
+          mv upx-4.2.2-win64/upx.exe .
+          Remove-Item -Recurse upx-4.2.2-win64
+          Remove-Item upx.zip
+
+      - name: Compress with UPX
+        run: |
+          # Compress the main executable
+          .\upx.exe --best --lzma ./rustdesk/rustdesk.exe
+          
+          # Compress other executables if they exist
+          if (Test-Path "./rustdesk/RustDeskTempTopMostWindow.exe") {
+            .\upx.exe --best --lzma ./rustdesk/RustDeskTempTopMostWindow.exe
+          }
 
       - name: Upload unsigned files
         if: ${{ inputs.upload-artifact }}
