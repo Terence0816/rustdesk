@@ -496,7 +496,7 @@ def main():
             build_flutter_windows(version, features, args.skip_portable_pack)
             return
         system2('cargo build --release --features ' + features)
-        system2('upx.exe target/release/rustdesk.exe')
+        # system2('upx.exe target/release/rustdesk.exe')
         system2('mv target/release/rustdesk.exe target/release/RustDesk.exe')
         pa = os.environ.get('P')
         if pa:
