@@ -30,6 +30,10 @@ macro_rules! my_println{
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn core_main() -> Option<Vec<String>> {
     crate::load_custom_client();
+    
+    // Initialize DEFAULT_SETTINGS with UserDefaultConfig default values
+    // This ensures UI can display correct default states for options
+    hbb_common::config::init_default_settings();
     #[cfg(windows)]
     if !crate::platform::windows::bootstrap() {
         // return None to terminate the process

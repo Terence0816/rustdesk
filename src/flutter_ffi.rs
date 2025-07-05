@@ -44,6 +44,10 @@ fn initialize(app_dir: &str, custom_client_config: &str) {
     } else {
         crate::read_custom_client(custom_client_config);
     }
+    
+    // Initialize DEFAULT_SETTINGS with UserDefaultConfig default values
+    // This ensures UI can display correct default states for options
+    hbb_common::config::init_default_settings();
     #[cfg(target_os = "android")]
     {
         // flexi_logger can't work when android_logger initialized.
@@ -2674,6 +2678,10 @@ pub mod server_side {
             if !custom_client_config.is_empty() {
                 let custom_client_config: String = custom_client_config.into();
                 crate::read_custom_client(&custom_client_config);
+                
+                // Initialize DEFAULT_SETTINGS with UserDefaultConfig default values
+                // This ensures UI can display correct default states for options
+                hbb_common::config::init_default_settings();
             }
         }
         std::thread::spawn(move || start_server(true));
