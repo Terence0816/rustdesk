@@ -198,14 +198,6 @@ OriginalFilename = "rustdesk.exe"
 
 [target.'cfg(target_os="windows")'.build-dependencies]
 winres = "0.1"
-
-[profile.release]
-opt-level = 3
-lto = true
-codegen-units = 1
-panic = "abort"
-strip = true
-rpath = true
 winapi = { version = "0.3", features = [ "winnt", "pdh", "synchapi" ] }
 
 [build-dependencies]
@@ -222,3 +214,12 @@ name = "RustDesk"
 identifier = "com.carriez.rustdesk"
 icon = ["res/32x32.png", "res/128x128.png", "res/128x128@2x.png"]
 osx_minimum_system_version = "10.14"
+
+#https://github.com/johnthagen/min-sized-rust
+[profile.release]
+lto = true
+codegen-units = 1
+panic = 'abort'
+strip = true
+#opt-level = 'z' # only have smaller size after strip
+rpath = true
