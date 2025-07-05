@@ -179,40 +179,6 @@ jobs:
           name: topmostwindow-artifacts
           path: ./rustdesk
 
-      - name: Install UPX
-        run: |
-          Invoke-WebRequest -Uri https://github.com/upx/upx/releases/download/v4.2.2/upx-4.2.2-win64.zip -OutFile upx.zip
-          Expand-Archive upx.zip -DestinationPath .
-          mv upx-4.2.2-win64/upx.exe .
-          Remove-Item -Recurse upx-4.2.2-win64
-          Remove-Item upx.zip
-
-      - name: Compress with UPX
-        run: |
-          # Compress the main executable
-          .\upx.exe --best --lzma ./rustdesk/rustdesk.exe
-          
-          # Compress other executables if they exist
-          if (Test-Path "./rustdesk/RustDeskTempTopMostWindow.exe") {
-            .\upx.exe --best --lzma ./rustdesk/RustDeskTempTopMostWindow.exe
-          }
-          
-          # Compress all DLL files in the rustdesk directory
-          Get-ChildItem -Path "./rustdesk" -Filter "*.dll" -Recurse | ForEach-Object {
-            Write-Output "Compressing DLL: $($_.FullName)"
-            try {
-              .\upx.exe --best --lzma $_.FullName
-              Write-Output "Successfully compressed: $($_.Name)"
-            } catch {
-              Write-Output "Failed to compress $($_.Name): $_"
-              # Continue with other files even if one fails
-            }
-          }
-          
-          # Show compression results
-          Write-Output "Compression completed. Final file sizes:"
-          Get-ChildItem -Path "./rustdesk" -Include "*.exe", "*.dll" -Recurse | Select-Object Name, @{Name="Size(MB)";Expression={[math]::Round($_.Length/1MB,2)}} | Format-Table
-
       - name: Upload unsigned files
         if: ${{ inputs.upload-artifact }}
         uses: actions/upload-artifact@master
